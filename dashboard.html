@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>換得換失｜報名進度儀表板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F3F1EA;
+    --ink:#141414;
+    --pink:#FF1E8E;
+    --pink-dark:#7A0D45;
+    --green-a:#39FF8A;
+    --green-b:#16D9C4;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Noto Sans TC', sans-serif; line-height:1.6;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:40px 20px 80px;}
+  .tag{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:'Space Mono',monospace; font-size:13px; letter-spacing:2px;
+    color:#fff; background:var(--pink); padding:6px 14px; border:2px solid var(--ink);
+  }
+  h1{font-size:clamp(28px,5vw,38px); font-weight:900; margin:16px 0 24px;}
+
+  /* 登入畫面 */
+  #loginScreen{max-width:360px; margin:60px auto; text-align:center;}
+  #loginScreen input{
+    width:100%; padding:12px; font-size:15px; border:2px solid var(--ink);
+    margin-bottom:14px; font-family:'Space Mono',monospace;
+  }
+  #loginScreen button{
+    width:100%; padding:13px; font-size:15px; font-weight:700; font-family:'Space Mono',monospace;
+    background:linear-gradient(120deg,var(--green-a),var(--green-b));
+    border:2px solid var(--ink); cursor:pointer; box-shadow:4px 4px 0 var(--ink);
+  }
+  #loginScreen button:active{transform:translate(2px,2px); box-shadow:2px 2px 0 var(--ink);}
+  #loginError{color:var(--pink-dark); font-size:13px; margin-top:8px; display:none; font-family:'Space Mono',monospace;}
+
+  /* 儀表板 */
+  #dashboard{display:none;}
+  .stats{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:28px;}
+  .stat-card{
+    flex:1; min-width:140px; background:#fff; border:2px solid var(--ink);
+    padding:16px 18px;
+  }
+  .stat-card .label{font-family:'Space Mono',monospace; font-size:12px; color:#777; letter-spacing:1px;}
+  .stat-card .num{font-size:32px; font-weight:900; margin-top:6px;}
+  .stat-card.pink .num{color:var(--pink-dark);}
+  .stat-card.green .num{color:#0F6E56;}
+
+  .toolbar{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center;}
+  .toolbar input, .toolbar select{
+    padding:9px 12px; border:2px solid var(--ink); font-size:14px; font-family:'Noto Sans TC',sans-serif; background:#fff;
+  }
+  .toolbar input{flex:1; min-width:160px;}
+  .toolbar button{
+    padding:9px 16px; border:2px solid var(--ink); background:#fff; font-family:'Space Mono',monospace;
+    font-size:13px; cursor:pointer;
+  }
+  .toolbar button:hover{background:var(--paper);}
+
+  table{width:100%; border-collapse:collapse; background:#fff; font-size:13.5px;}
+  th, td{border:1px solid #d8d4c8; padding:9px 10px; text-align:left; white-space:nowrap;}
+  th{background:var(--ink); color:#fff; font-family:'Space Mono',monospace; font-size:12px; letter-spacing:0.5px; position:sticky; top:0;}
+  tr:nth-child(even) td{background:#faf9f5;}
+  td a{color:var(--pink-dark);}
+  .badge{
+    font-family:'Space Mono',monospace; font-size:12px; padding:3px 9px; border:1px solid var(--ink);
+    display:inline-block;
+  }
+  .badge.pending{background:#FBEAF0; border-color:var(--pink);}
+  .badge.confirmed{background:#E1F5EE; border-color:var(--green-b);}
+  .table-wrap{overflow-x:auto; border:2px solid var(--ink);}
+  .empty{text-align:center; padding:40px; color:#888; font-family:'Space Mono',monospace;}
+  .loading{text-align:center; padding:40px; font-family:'Space Mono',monospace; color:#888;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">ADMIN · 內部使用</span>
+  <h1>報名進度儀表板</h1>
+
+  <div id="loginScreen">
+    <input type="password" id="keyInput" placeholder="請輸入通關密碼">
+    <button onclick="login()">登入查看</button>
+    <div id="loginError">密碼錯誤，請重新輸入</div>
+  </div>
+
+  <div id="dashboard">
+    <div class="stats">
+      <div class="stat-card"><div class="label">總報名數</div><div class="num" id="statTotal">0</div></div>
+      <div class="stat-card pink"><div class="label">待審核</div><div class="num" id="statPending">0</div></div>
+      <div class="stat-card green"><div class="label">已確認</div><div class="num" id="statConfirmed">0</div></div>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" id="searchInput" placeholder="搜尋姓名或電話">
+      <select id="statusFilter">
+        <option value="">全部狀態</option>
+        <option value="待審核">待審核</option>
+        <option value="已確認">已確認</option>
+      </select>
+      <button onclick="loadData()">重新整理</button>
+    </div>
+
+    <div class="table-wrap">
+      <table id="dataTable">
+        <thead>
+          <tr>
+            <th>時間戳記</th><th>姓名</th><th>電話</th><th>所屬品牌</th>
+            <th>寄售件數</th><th>轉帳金額</th><th>末五碼</th><th>截圖</th><th>狀態</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const ENDPOINT_URL = "https://script.google.com/macros/s/AKfycbyEPFIqM9l7c-UX1MqOBX3kZkt8qxuGwKF1ZFPEHK5Gaf8wBWilDvIOUB1gVZXYnEJpHw/exec";
+  let adminKey = '';
+  let allRecords = [];
+
+  function login(){
+    const key = document.getElementById('keyInput').value.trim();
+    if (!key) return;
+    adminKey = key;
+    loadData(true);
+  }
+
+  async function loadData(isLogin){
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '<tr><td colspan="9" class="loading">資料讀取中...</td></tr>';
+    if (isLogin){
+      document.getElementById('dashboard').style.display = 'none';
+    }
+
+    try {
+      const res = await fetch(ENDPOINT_URL + '?action=list&key=' + encodeURIComponent(adminKey));
+      const result = await res.json();
+
+      if (result.status !== 'success') {
+        if (isLogin) {
+          document.getElementById('loginError').style.display = 'block';
+        }
+        return;
+      }
+
+      if (isLogin) {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+      }
+
+      allRecords = result.records;
+      renderTable();
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">讀取失敗：' + err.message + '</td></tr>';
+    }
+  }
+
+  function renderTable(){
+    const search = document.getElementById('searchInput').value.trim();
+    const statusFilter = document.getElementById('statusFilter').value;
+
+    let filtered = allRecords.filter(r => {
+      const matchSearch = !search || (r['姓名'] || '').includes(search) || (String(r['電話']) || '').includes(search);
+      const matchStatus = !statusFilter || r['審核狀態'] === statusFilter;
+      return matchSearch && matchStatus;
+    });
+
+    document.getElementById('statTotal').textContent = allRecords.length;
+    document.getElementById('statPending').textContent = allRecords.filter(r => r['審核狀態'] === '待審核').length;
+    document.getElementById('statConfirmed').textContent = allRecords.filter(r => r['審核狀態'] === '已確認').length;
+
+    const tbody = document.getElementById('tableBody');
+    if (filtered.length === 0){
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">查無符合條件的資料</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(r => {
+      const badgeClass = r['審核狀態'] === '已確認' ? 'confirmed' : 'pending';
+      const link = r['截圖連結'] ? '<a href="' + r['截圖連結'] + '" target="_blank">查看</a>' : '-';
+      return '<tr>' +
+        '<td>' + (r['時間戳記'] || '') + '</td>' +
+        '<td>' + (r['姓名'] || '') + '</td>' +
+        '<td>' + (r['電話'] || '') + '</td>' +
+        '<td>' + (r['所屬品牌'] || '-') + '</td>' +
+        '<td>' + (r['寄售件數'] || '未定') + '</td>' +
+        '<td>' + (r['轉帳金額'] || '') + '</td>' +
+        '<td>' + (r['轉帳末五碼'] || '') + '</td>' +
+        '<td>' + link + '</td>' +
+        '<td><span class="badge ' + badgeClass + '">' + (r['審核狀態'] || '待審核') + '</span></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  document.getElementById('searchInput').addEventListener('input', renderTable);
+  document.getElementById('statusFilter').addEventListener('change', renderTable);
+  document.getElementById('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+</script>
+</body>
+</html>
